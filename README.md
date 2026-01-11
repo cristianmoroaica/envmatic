@@ -2,7 +2,7 @@
 
 **Your secrets, your control.**
 
-Envmatic is a cross-platform CLI tool for managing dotfiles and environment secrets. It uses Git as a secure, private storage backend with optional encryption.
+Envmatic is a cross-platform CLI tool for managing dotfiles and environment secrets. It uses Git as a secure, private storage backend with optional AES-256 encryption.
 
 ## Features
 
@@ -11,6 +11,8 @@ Envmatic is a cross-platform CLI tool for managing dotfiles and environment secr
 - 📁 **Organized Structure** - Intuitive project/environment hierarchy
 - 🔗 **Smart Linking** - Symlink or copy secrets to projects
 - 🔒 **Immutable Files** - Protect against accidental changes
+- ✏️ **External Editor Support** - Edit with Vim, Neovim, VS Code, etc.
+- 🔄 **Password Rotation** - Change encryption password or switch methods
 - 🖥️ **Cross-Platform** - Works on Windows, macOS, and Linux
 
 ## Installation
@@ -67,45 +69,345 @@ envmatic use
 envmatic use "myapp/development/.env"
 ```
 
-## Commands
+---
 
-### Setup
+## Commands Reference
 
-| Command | Description |
-|---------|-------------|
-| `envmatic init` | Initialize with a Git repository |
-| `envmatic status` | Show current status and configuration |
+### Setup & Configuration
+
+#### `envmatic init`
+
+Initialize Envmatic with a Git repository.
+
+```bash
+envmatic init [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-f, --force` | Force re-initialization (overwrites current settings) |
+
+#### `envmatic status`
+
+Show current status and configuration.
+
+```bash
+envmatic status [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Output as JSON |
+
+---
+
+### Security & Encryption
+
+#### `envmatic change-password`
+
+Change your encryption password. Requires the current password to decrypt and re-encrypt all files.
+
+```bash
+envmatic change-password
+```
+
+> ⚠️ **Warning:** If you forget your password, all encrypted data will be permanently lost.
+
+#### `envmatic rotate-key`
+
+Rotate encryption key or change encryption method (password ↔ SSH key).
+
+```bash
+envmatic rotate-key
+```
+
+Allows you to:
+- Switch from password to SSH key encryption
+- Switch from SSH key to password encryption
+- Disable encryption (not recommended)
+
+---
 
 ### File Management
 
-| Command | Description |
-|---------|-------------|
-| `envmatic add` | Add a new env file interactively |
-| `envmatic import <path>` | Import an existing .env file |
-| `envmatic list` | List all env files |
-| `envmatic show <file-id>` | Display file contents |
-| `envmatic edit <file-id>` | Edit a file interactively |
-| `envmatic set <file-id> <key> <value>` | Set a single variable |
-| `envmatic unset <file-id> <key>` | Remove a variable |
-| `envmatic delete <file-id>` | Delete an env file |
+#### `envmatic add`
+
+Add a new env file to the vault interactively.
+
+```bash
+envmatic add [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-p, --project <name>` | Project name |
+| `-e, --environment <name>` | Environment name |
+| `-n, --name <name>` | File name (default: `.env`) |
+| `-d, --description <text>` | Description |
+
+#### `envmatic import`
+
+Import an existing `.env` file into the vault.
+
+```bash
+envmatic import <path> [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-p, --project <name>` | Project name |
+| `-e, --environment <name>` | Environment name |
+| `-n, --name <name>` | File name |
+| `-d, --description <text>` | Description |
+
+**Example:**
+```bash
+envmatic import .env --project myapp --environment development
+```
+
+#### `envmatic list`
+
+List all env files in the vault.
+
+```bash
+envmatic list [options]
+# Alias: envmatic ls
+```
+
+| Option | Description |
+|--------|-------------|
+| `-p, --project <name>` | Filter by project |
+| `--json` | Output as JSON |
+
+#### `envmatic show`
+
+Display contents of an env file.
+
+```bash
+envmatic show [file-id] [options]
+# Alias: envmatic get
+```
+
+| Option | Description |
+|--------|-------------|
+| `-r, --reveal` | Reveal full values (not masked) |
+| `--json` | Output as JSON |
+
+**Example:**
+```bash
+envmatic show myapp/development/.env --reveal
+```
+
+#### `envmatic edit`
+
+Edit an env file interactively or with an external editor.
+
+```bash
+envmatic edit [file-id] [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-e, --editor` | Open in external editor (Vim, Neovim, VS Code, etc.) |
+
+**Interactive mode (default):**
+```bash
+envmatic edit myapp/development/.env
+```
+
+**External editor mode:**
+```bash
+envmatic edit myapp/development/.env --editor
+```
+
+When using `--editor`, you'll be prompted to choose from available editors on your system.
+
+#### `envmatic set`
+
+Set a single variable in an env file.
+
+```bash
+envmatic set <file-id> <key> <value>
+```
+
+**Example:**
+```bash
+envmatic set myapp/production/.env API_KEY sk-1234567890
+```
+
+#### `envmatic unset`
+
+Remove a variable from an env file.
+
+```bash
+envmatic unset <file-id> <key>
+```
+
+**Example:**
+```bash
+envmatic unset myapp/production/.env OLD_API_KEY
+```
+
+#### `envmatic delete`
+
+Delete an env file from the vault.
+
+```bash
+envmatic delete [file-id]
+# Alias: envmatic rm
+```
+
+#### `envmatic lock`
+
+Lock (protect) env files after editing. Lists all unlocked files and allows you to secure them.
+
+```bash
+envmatic lock [file-id] [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-a, --all` | Lock all unlocked files |
+
+**Examples:**
+```bash
+# List and lock unlocked files interactively
+envmatic lock
+
+# Lock a specific file
+envmatic lock myapp/development/.env
+
+# Lock all unlocked files
+envmatic lock --all
+```
+
+---
 
 ### Project Integration
 
-| Command | Description |
-|---------|-------------|
-| `envmatic use [file-id]` | Import env file into current project |
-| `envmatic pull` | Auto-detect project and pull matching env |
-| `envmatic link <file-id> <target>` | Create a symlink |
-| `envmatic copy <file-id> <target>` | Create a decrypted copy |
-| `envmatic unlink <target>` | Remove a linked file |
-| `envmatic links` | List all linked files |
+#### `envmatic use`
+
+Import an env file into the current project.
+
+```bash
+envmatic use [file-id] [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-o, --output <path>` | Output file path (default: `.env`) |
+| `-s, --symlink` | Create symlink instead of copy |
+| `-f, --force` | Overwrite without confirmation |
+
+**Example:**
+```bash
+envmatic use myapp/production/.env --output .env.production
+```
+
+#### `envmatic pull`
+
+Auto-detect project and pull matching env file.
+
+```bash
+envmatic pull [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-e, --env <name>` | Environment name (development, production, etc.) |
+| `-o, --output <path>` | Output file path (default: `.env`) |
+| `-s, --symlink` | Create symlink instead of copy |
+| `-f, --force` | Overwrite without confirmation |
+
+**Example:**
+```bash
+cd myapp
+envmatic pull --env production --output .env
+```
+
+#### `envmatic link`
+
+Create a symlink to an env file.
+
+```bash
+envmatic link [file-id] [target] [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-c, --copy` | Create a copy instead of symlink |
+| `-a, --auto-sync` | Auto-sync copies on changes |
+
+> **Note:** Symlinks only work for unencrypted files. Encrypted files require copy mode.
+
+**Example:**
+```bash
+envmatic link myapp/development/.env ./.env
+```
+
+#### `envmatic copy`
+
+Create a decrypted copy of an env file.
+
+```bash
+envmatic copy [file-id] [target] [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-a, --auto-sync` | Auto-sync on changes |
+
+**Example:**
+```bash
+envmatic copy myapp/production/.env ./.env
+```
+
+#### `envmatic unlink`
+
+Remove a linked file.
+
+```bash
+envmatic unlink [target]
+```
+
+#### `envmatic links`
+
+List all linked files.
+
+```bash
+envmatic links [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Output as JSON |
+
+---
 
 ### Sync
 
-| Command | Description |
-|---------|-------------|
-| `envmatic sync` | Sync with remote repository |
-| `envmatic sync-links` | Update all copied files |
+#### `envmatic sync`
+
+Sync vault with remote repository.
+
+```bash
+envmatic sync [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--push` | Push only |
+| `--pull` | Pull only |
+
+#### `envmatic sync-links`
+
+Update all copied files from vault.
+
+```bash
+envmatic sync-links
+```
+
+---
 
 ## Vault Structure
 
@@ -128,17 +430,46 @@ Your secrets are organized in an intuitive hierarchy:
         └── .env.enc
 ```
 
+---
+
 ## Encryption
 
-Envmatic uses **AES-256-GCM** encryption with PBKDF2 key derivation.
+Envmatic uses **AES-256-GCM** encryption with PBKDF2 key derivation (100,000 iterations, SHA-512).
 
 ### Password Mode
+
 You'll be prompted for your password when accessing encrypted files.
 
-### SSH Key Mode
-Uses your existing SSH private key for encryption - no password needed if your key is loaded in ssh-agent.
+```
+⚠️ PASSWORD SECURITY WARNING
 
-**⚠️ Important:** Your password or SSH key cannot be recovered. Keep them safe!
+Your password is the ONLY way to decrypt your secrets.
+There is NO password recovery mechanism.
+
+If you forget your password:
+→ All encrypted data will be PERMANENTLY LOST
+→ There is NO way to recover your secrets
+
+We strongly recommend:
+• Using a password manager to store your password
+• Writing it down and storing it securely offline
+```
+
+### SSH Key Mode
+
+Uses your existing SSH private key for encryption. No password prompt needed if your key is loaded in ssh-agent.
+
+### Changing Password or Encryption Method
+
+```bash
+# Change password (requires current password)
+envmatic change-password
+
+# Switch encryption method (password ↔ SSH key)
+envmatic rotate-key
+```
+
+---
 
 ## Programmatic Usage
 
@@ -167,6 +498,8 @@ const apiKey = await getVariable('myapp/production/.env', 'API_KEY', {
 });
 ```
 
+---
+
 ## Security Considerations
 
 1. **Private Repository**: Always use a private Git repository
@@ -174,6 +507,9 @@ const apiKey = await getVariable('myapp/production/.env', 'API_KEY', {
 3. **Encryption**: Enable encryption for sensitive production secrets
 4. **SSH Keys**: Consider using SSH key encryption for convenience with security
 5. **File Permissions**: Enable immutable mode to prevent accidental changes
+6. **Password Storage**: Use a password manager; there's no recovery mechanism
+
+---
 
 ## Configuration
 
@@ -189,6 +525,8 @@ Configuration is stored in `~/.envmatic/config.json`:
 }
 ```
 
+---
+
 ## Troubleshooting
 
 ### Symlinks on Windows
@@ -197,7 +535,7 @@ Creating symlinks on Windows requires either:
 - **Developer Mode** enabled (Settings → Update & Security → For developers)
 - Running as Administrator
 
-Alternatively, use the `--copy` flag to create copies instead of symlinks.
+Alternatively, use the `--copy` flag or `envmatic copy` command.
 
 ### Git Authentication
 
@@ -213,7 +551,17 @@ If you're having trouble with encryption:
 2. For SSH, ensure your key is readable: `ssh-keygen -y -f ~/.ssh/id_rsa`
 3. The encryption salt is stored in your vault - don't delete `.envmatic-salt`
 
+### Unlocked Files
+
+If you edited files with `--editor` and forgot to lock them:
+```bash
+envmatic lock
+```
+
+This will list all unlocked files and let you secure them.
+
+---
+
 ## License
 
 MIT
-
