@@ -1,0 +1,36 @@
+# Source files (only dist is needed)
+src/
+tsconfig.json
+
+# Development files
+.git/
+.gitignore
+.vscode/
+.idea/
+*.log
+npm-debug.log*
+
+# Test files
+test/
+tests/
+*.test.ts
+*.spec.ts
+coverage/
+
+# Documentation source (README is included automatically)
+docs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+
+# Local config
+.env
+.env.local
+.envmatic/
+

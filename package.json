@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Cross-platform dotfile and secret manager with Git-based encrypted storage",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
     "envmatic": "dist/cli.js",
     "evm": "dist/cli.js"
@@ -13,20 +14,36 @@
     "dev": "tsc --watch",
     "start": "node dist/cli.js",
     "lint": "eslint src/**/*.ts",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test": "echo \"No tests yet\" && exit 0"
   },
   "keywords": [
     "dotfiles",
     "env",
     "secrets",
     "environment",
+    "environment-variables",
     "config",
+    "configuration",
     "git",
     "encrypted",
-    "cross-platform"
+    "encryption",
+    "cross-platform",
+    "cli",
+    "dotenv",
+    "secret-management",
+    "vault"
   ],
-  "author": "",
+  "author": "Cristian Moroaica",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cristianmoroaica/envmatic"
+  },
+  "homepage": "https://github.com/cristianmoroaica/envmatic",
+  "bugs": {
+    "url": "https://github.com/cristianmoroaica/envmatic/issues"
+  },
   "dependencies": {
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
