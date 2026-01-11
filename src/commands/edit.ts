@@ -5,30 +5,45 @@
 
 import inquirer from 'inquirer';
 import ora from 'ora';
+import fs from 'fs-extra';
+import path from 'path';
+import os from 'os';
 import { 
   readEnvFile, 
   updateEnvFile, 
   setVariable, 
   removeVariable,
   listEnvFiles,
-  getEnvFilePath
+  getEnvFilePath,
+  parseEnvContent,
+  serializeEnvContent
 } from '../services/envfile.js';
-import { sync } from '../services/git.js';
+import { sync, commitChanges } from '../services/git.js';
 import { getConfig } from '../services/config.js';
 import { makeMutable, makeImmutable } from '../services/protection.js';
 import { syncCopies } from '../services/linker.js';
+import { decrypt, encrypt } from '../services/encryption.js';
 import { 
   printBanner, 
   success, 
   error, 
   info,
+  warning,
   colors, 
   formatFileId,
   maskValue
 } from '../utils/display.js';
 import { getEncryptionOptions, select, confirm } from '../utils/prompts.js';
+import { detectEditors, openInEditor, isTerminalEditor } from '../utils/editor.js';
+import type { EncryptionOptions } from '../types/index.js';
 
-export async function editCommand(fileId?: string): Promise<void> {
+/**
+ * Edit command with optional external editor support
+ */
+export async function editCommand(
+  fileId?: string,
+  options: { editor?: boolean } = {}
+): Promise<void> {
   printBanner();
   
   const config = await getConfig();
@@ -66,6 +81,12 @@ export async function editCommand(fileId?: string): Promise<void> {
     const filePath = getEnvFilePath(fileId, metadata.encrypted);
     if (metadata.immutable) {
       await makeMutable(filePath);
+    }
+    
+    // External editor mode
+    if (options.editor) {
+      await editWithExternalEditor(fileId, metadata, variables, encryptionOptions, filePath);
+      return;
     }
     
     // Interactive edit loop
@@ -194,6 +215,180 @@ export async function editCommand(fileId?: string): Promise<void> {
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     error(errorMessage);
+  }
+}
+
+/**
+ * Edit a file using an external editor
+ */
+async function editWithExternalEditor(
+  fileId: string,
+  metadata: { encrypted: boolean; immutable: boolean },
+  variables: Record<string, string>,
+  encryptionOptions: EncryptionOptions | undefined,
+  filePath: string
+): Promise<void> {
+  // Detect available editors
+  const detectSpinner = ora('Detecting available editors...').start();
+  const editors = await detectEditors();
+  detectSpinner.stop();
+  
+  if (editors.length === 0) {
+    error('No editors found on your system.');
+    info('Set the EDITOR environment variable to specify your preferred editor.');
+    
+    // Restore protection
+    if (metadata.immutable) {
+      await makeImmutable(filePath);
+    }
+    return;
+  }
+  
+  // Let user choose editor
+  const { editorChoice } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'editorChoice',
+      message: 'Choose an editor:',
+      choices: editors.map(e => ({
+        name: e.name,
+        value: e.command,
+      })),
+    },
+  ]);
+  
+  // For encrypted files, we need to create a temporary decrypted file
+  let editFilePath = filePath;
+  let tempFilePath: string | null = null;
+  
+  if (metadata.encrypted) {
+    // Create a temp file with decrypted content
+    const tempDir = os.tmpdir();
+    const tempFileName = `envmatic-edit-${Date.now()}.env`;
+    tempFilePath = path.join(tempDir, tempFileName);
+    
+    const content = serializeEnvContent(variables);
+    await fs.writeFile(tempFilePath, content);
+    editFilePath = tempFilePath;
+    
+    console.log();
+    info('Created temporary decrypted file for editing.');
+  }
+  
+  console.log();
+  console.log(colors.warning('┌─────────────────────────────────────────────────────────────┐'));
+  console.log(colors.warning('│') + colors.accent(' 🔓 FILE UNLOCKED FOR EDITING                                ') + colors.warning('│'));
+  console.log(colors.warning('├─────────────────────────────────────────────────────────────┤'));
+  console.log(colors.warning('│') + '  The file is now unlocked and editable.                     ' + colors.warning('│'));
+  console.log(colors.warning('│') + '                                                             ' + colors.warning('│'));
+  console.log(colors.warning('│') + '  After you finish editing and close the editor:             ' + colors.warning('│'));
+  console.log(colors.warning('│') + '  • Changes will be saved automatically                      ' + colors.warning('│'));
+  console.log(colors.warning('│') + '  • The file will be re-encrypted (if applicable)            ' + colors.warning('│'));
+  console.log(colors.warning('│') + '  • You\'ll be prompted to sync and lock                      ' + colors.warning('│'));
+  console.log(colors.warning('│') + '                                                             ' + colors.warning('│'));
+  console.log(colors.warning('│') + '  If something goes wrong, run:                              ' + colors.warning('│'));
+  console.log(colors.warning('│') + colors.primary('  envmatic lock                                              ') + colors.warning('│'));
+  console.log(colors.warning('└─────────────────────────────────────────────────────────────┘'));
+  console.log();
+  
+  // Open editor and wait
+  const editorSpinner = ora('Opening editor...').start();
+  
+  try {
+    // For terminal editors, stop the spinner before opening
+    if (isTerminalEditor(editorChoice)) {
+      editorSpinner.stop();
+      console.log(colors.muted('Opening editor... (save and quit when done)\n'));
+    }
+    
+    await openInEditor(editFilePath, editorChoice);
+    
+    if (!isTerminalEditor(editorChoice)) {
+      editorSpinner.succeed('Editor closed');
+    }
+    
+    // Read the edited content
+    const editedContent = await fs.readFile(editFilePath, 'utf-8');
+    const editedVariables = parseEnvContent(editedContent);
+    
+    // Check if content changed
+    const originalContent = serializeEnvContent(variables);
+    const newContent = serializeEnvContent(editedVariables);
+    
+    if (originalContent === newContent) {
+      info('No changes detected.');
+      
+      // Clean up temp file
+      if (tempFilePath) {
+        await fs.remove(tempFilePath);
+      }
+      
+      // Ask if they want to lock the file
+      const shouldLock = await confirm('Lock the file?', true);
+      if (shouldLock && metadata.immutable) {
+        await makeImmutable(filePath);
+        success('File locked.');
+      } else if (!shouldLock) {
+        console.log();
+        warning('File remains unlocked. Run `envmatic lock` when done.');
+      }
+      
+      return;
+    }
+    
+    // Save changes
+    const saveSpinner = ora('Saving changes...').start();
+    
+    await updateEnvFile(fileId, editedVariables, encryptionOptions);
+    
+    saveSpinner.succeed('Changes saved');
+    
+    // Clean up temp file
+    if (tempFilePath) {
+      await fs.remove(tempFilePath);
+    }
+    
+    // Sync copies
+    await syncCopies(fileId, encryptionOptions);
+    
+    // Sync to remote
+    const shouldSync = await confirm('Sync changes to remote?', true);
+    
+    if (shouldSync) {
+      const syncSpinner = ora('Syncing to remote...').start();
+      try {
+        await sync();
+        syncSpinner.succeed('Synced');
+      } catch {
+        syncSpinner.warn('Could not sync (will sync later)');
+      }
+    }
+    
+    // Lock the file
+    const shouldLock = await confirm('Lock the file?', true);
+    
+    if (shouldLock && metadata.immutable) {
+      await makeImmutable(filePath);
+      success('File locked.');
+    } else if (!shouldLock) {
+      console.log();
+      warning('File remains unlocked. Run `envmatic lock` when done.');
+    }
+    
+    console.log();
+    success('File updated successfully!');
+    
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    error(`Editor error: ${errorMessage}`);
+    
+    // Clean up temp file on error
+    if (tempFilePath && await fs.pathExists(tempFilePath)) {
+      await fs.remove(tempFilePath);
+    }
+    
+    console.log();
+    warning('File may still be unlocked. Run `envmatic lock` to secure it.');
   }
 }
 

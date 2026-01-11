@@ -20,6 +20,7 @@ import { editCommand, setCommand, unsetCommand } from './commands/edit.js';
 import { deleteCommand } from './commands/delete.js';
 import { useCommand, pullCommand } from './commands/use.js';
 import { changePasswordCommand, rotateKeyCommand } from './commands/rotate.js';
+import { lockCommand } from './commands/lock.js';
 
 const program = new Command();
 
@@ -111,8 +112,9 @@ program
 program
   .command('edit [file-id]')
   .description('Interactively edit an env file')
-  .action(async (fileId) => {
-    await editCommand(fileId);
+  .option('-e, --editor', 'Open in external editor (vim, VS Code, etc.)')
+  .action(async (fileId, options) => {
+    await editCommand(fileId, options);
   });
 
 program
@@ -135,6 +137,14 @@ program
   .description('Delete an env file from the vault')
   .action(async (fileId) => {
     await deleteCommand(fileId);
+  });
+
+program
+  .command('lock [file-id]')
+  .description('Lock (protect) env files after editing')
+  .option('-a, --all', 'Lock all unlocked files')
+  .action(async (fileId, options) => {
+    await lockCommand(fileId, options);
   });
 
 // ============================================================================
